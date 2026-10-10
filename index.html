@@ -1,0 +1,198 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Belize House – 3D Model</title>
+<style>body{margin:0;overflow:hidden;font-family:sans-serif;overscroll-behavior:none}canvas{touch-action:none;display:block}@media (max-width:600px){#ui{font-size:11px;padding:6px;max-width:calc(100vw - 28px);top:6px;left:6px}#ui button{padding:5px 7px;margin:1px}#info{display:none}}#ui{position:absolute;top:10px;left:10px;background:#fffd;padding:10px;border-radius:8px;font-size:13px;max-width:290px}button{margin:2px;padding:6px 10px}</style>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+</head><body><div id="ui"><b>Belize House – 1 acre lot</b><br>
+<button id="btnTop">Top-down view</button><button id="btn3d">3D view</button><button id="btnFront">Front view</button><br>
+<label><input type="checkbox" id="roof" checked> Roofs</label> <label><input type="checkbox" id="grid" checked> Grid (10 ft)</label><br><label><input type="checkbox" id="rooms"> Room labels</label> <label><input type="checkbox" id="jungle" checked> Jungle</label>
+<div id="info"></div><div style="color:#666;font-size:11px">Drag/1 finger = rotate · Scroll/pinch = zoom · Right-drag/2 fingers = pan</div></div>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+// ================= CONFIG (feet). +Z = front/street, X = left->right facing house =================
+const LOT=208.7, H=LOT/2, WALL=9.5, PITCH=5/12, EAVE=2;
+const HOUSE_Z=-10;                                                 // house center offset (front yard a bit bigger)
+const C={stucco:0xefe3c8,trim:0xffffff,tile:0xb8562e,win:0x2a2a2a,slab:0xc9c2b4,dirt:0xa8673f,dirt2:0x9a7a5a,wood:0x8a5a35,metal:0x9aa3a8,block:0xbdb8ad,iron:0x1a1a1a};
+// =================================================================================================
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x9fd3f5);
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true}); renderer.setSize(innerWidth,innerHeight); renderer.shadowMap.enabled=true; document.body.appendChild(renderer.domElement);
+const cam=new THREE.PerspectiveCamera(50,innerWidth/innerHeight,1,5000);
+const controls=new OrbitControls(cam,renderer.domElement); controls.enableDamping=true; controls.touches={ONE:THREE.TOUCH.ROTATE,TWO:THREE.TOUCH.DOLLY_PAN}; controls.maxPolarAngle=Math.PI/2.05;
+scene.add(new THREE.HemisphereLight(0xffffff,0x886644,0.9)); const sun=new THREE.DirectionalLight(0xffffff,1.6); sun.position.set(90,200,140); sun.castShadow=true;
+Object.assign(sun.shadow.camera,{left:-130,right:130,top:130,bottom:-130,far:700}); sun.shadow.mapSize.set(2048,2048); scene.add(sun);
+const mats={}; const M=c=>mats[c]||(mats[c]=new THREE.MeshStandardMaterial({color:c,roughness:.9,side:THREE.DoubleSide}));
+function B(parent,w,h,d,x,y,z,c,ry=0){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),typeof c=='number'?M(c):c);m.position.set(x,y,z);m.rotation.y=ry;m.castShadow=m.receiveShadow=true;parent.add(m);return m;}
+function label(t,x,z,s=14,y=2){const c=document.createElement('canvas');c.width=256;c.height=64;const g=c.getContext('2d');g.font='bold 34px sans-serif';g.fillStyle='#000';g.textAlign='center';g.fillText(t,128,44);
+ const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false}));sp.scale.set(s,s/4,1);sp.position.set(x,y,z);scene.add(sp);return sp;}
+// ================= LOT =================
+const site=new THREE.Group(); scene.add(site);
+{const g=new THREE.Mesh(new THREE.PlaneGeometry(LOT+160,LOT+160),M(0x4f7a3a));g.rotation.x=-Math.PI/2;g.receiveShadow=true;site.add(g);
+ const d=new THREE.Mesh(new THREE.PlaneGeometry(LOT,LOT),M(C.dirt));d.rotation.x=-Math.PI/2;d.position.y=.02;d.receiveShadow=true;d.name='ground';site.add(d);window.ground=d;}
+const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([[-H,-H],[H,-H],[H,H],[-H,H],[-H,-H]].map(p=>new THREE.Vector3(p[0],.4,p[1]))),new THREE.LineBasicMaterial({color:0xff2222})); site.add(line);
+const grid=new THREE.GridHelper(260,26,0x553322,0x6b4a33); grid.position.y=.05; scene.add(grid);
+const grid50=new THREE.GridHelper(250,5,0x111111,0x111111); grid50.position.y=.08; scene.add(grid50);
+label('208.7 ft',0,H+10,24); label('208.7 ft',H+14,0,24); label('Front (road)',0,H+20,22); label('Back',0,-H-10,22);
+for(let d=-100;d<=100;d+=50) label(d+' ft',d,-H-3,10);
+// ================= ROOF HELPERS =================
+const roofs=new THREE.Group(); scene.add(roofs);
+// gable roof over w (x) by d (z); ridge along 'axis' ('x' or 'z'); exposed rafter tails + white fascia
+function gable(cx,cz,w,d,axis,base=WALL){
+ const g=new THREE.Group(); g.position.set(cx,base,cz); if(axis==='z'){g.rotation.y=Math.PI/2;[w,d]=[d,w];} roofs.add(g);
+ const L=w+2*EAVE, S=d/2+EAVE, rise=(d/2)*PITCH, drop=EAVE*PITCH, slope=Math.hypot(S,rise+drop), ang=Math.atan2(rise+drop,S);
+ for(const s of [1,-1]){const p=B(g,L,.5,slope,0,(rise-drop)/2,s*S/2,C.tile);p.rotation.x=s*ang;
+   B(g,L,.8,.25,0,-drop-.2,s*S,C.trim); // fascia
+   for(let x=-L/2+1;x<L/2;x+=2) B(g,.25,.4,EAVE,x,-drop/2-.3,s*(d/2+EAVE/2),C.trim).rotation.x=s*ang;} // rafter tails
+ // gable end triangles (stucco) + white bargeboards
+ const tri=new THREE.Shape([new THREE.Vector2(-d/2,0),new THREE.Vector2(d/2,0),new THREE.Vector2(0,rise)]);
+ for(const s of [1,-1]){const t=new THREE.Mesh(new THREE.ShapeGeometry(tri),M(C.stucco));t.rotation.y=Math.PI/2;t.position.x=s*w/2;g.add(t);
+   for(const k of [1,-1]){const bb=B(g,.3,.9,slope,s*(L/2),(rise-drop)/2,k*S/2,C.trim);bb.rotation.x=k*ang;}}
+ return g;}
+function hipFlat(cx,cz,w,d,h=.5,base=8.5,c=C.tile){const r=B(roofs,w,h,d,cx,base,cz,c);return r;}
+// ================= HOUSE: traced from listing floor plan (plan bottom = street) =================
+// plan px (1024x768 image), 7.6 px/ft (garage 19'4" = 147 px). x: viewer's left->right from street; plan y grows toward street (+Z).
+const PLAN_PX_FT=7.6;
+const EXT=[[225,363],[628,363],[628,190],[798,190],[798,668],[658,668],[658,575],[600,575],[600,601],[225,601]];
+const GAR=[225,428,372,601];
+const ROOMS=[ // name, x0,y0,x1,y1 (plan px)
+ ['Garage',225,428,372,601],['Laundry',225,363,290,428],['Bath',290,363,330,400],['Hall',290,400,372,428],
+ ['Dining',372,363,470,420],['Kitchen',372,420,470,492],['Family Room',470,363,628,492],['Living Room',372,492,600,601],
+ ['Foyer / Hall',628,470,705,583],['Bath 2',628,395,683,470],['Hall',683,395,705,470],
+ ['Primary Bedroom',628,190,738,395],['W.I.C.',738,190,798,265],['Primary Bath',715,265,798,395],
+ ['Bedroom 2',705,395,798,478],['Bedroom 3',705,478,798,583],['Bedroom 4',658,583,798,668]];
+const PCX=511, PCY=429;
+const polyArea=p=>Math.abs(p.reduce((s,q,i)=>{const r=p[(i+1)%p.length];return s+q[0]*r[1]-r[0]*q[1];},0))/2;
+const condPx=polyArea(EXT)-(GAR[2]-GAR[0])*(GAR[3]-GAR[1]);
+const PHX_COND=condPx/PLAN_PX_FT**2;                     // base plan conditioned area
+const FT=Math.sqrt(3600/condPx);                        // ft per plan px after uniform scale-up
+const XX=px=>(px-PCX)*FT, ZZ=py=>HOUSE_Z+(py-PCY)*FT;
+const house=new THREE.Group(); scene.add(house); const roomLabels=new THREE.Group(); scene.add(roomLabels);
+function seg(x0,z0,x1,z1,t,h,c,grp=house){const L=Math.hypot(x1-x0,z1-z0);if(L<.01)return;B(grp,L+t,h,t,(x0+x1)/2,h/2,(z0+z1)/2,c,-Math.atan2(z1-z0,x1-x0));}
+// floor slab
+{const sh=new THREE.Shape(EXT.map(p=>new THREE.Vector2(XX(p[0]),-ZZ(p[1]))));const m=new THREE.Mesh(new THREE.ShapeGeometry(sh),M(0xd9d2c4));m.rotation.x=-Math.PI/2;m.position.y=.25;m.receiveShadow=true;house.add(m);}
+// exterior walls
+EXT.forEach((p,i)=>{const q=EXT[(i+1)%EXT.length];seg(XX(p[0]),ZZ(p[1]),XX(q[0]),ZZ(q[1]),.8,WALL,C.stucco);});
+// interior walls (room edges) + labels
+const intW=new THREE.Group(); house.add(intW);
+ROOMS.forEach(([n,x0,y0,x1,y1])=>{const a=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]];a.forEach((p,i)=>{const q=a[(i+1)%4];seg(XX(p[0]),ZZ(p[1]),XX(q[0]),ZZ(q[1]),.35,WALL-.1,0xf6efe0,intW);});
+ const w=Math.round((x1-x0)*FT),d=Math.round((y1-y0)*FT); const l=label(n+(n.length<14?` ${w}×${d}`:''),XX((x0+x1)/2),ZZ((y0+y1)/2),Math.min(14,(x1-x0)*FT*.9),WALL+1);roomLabels.add(l);});
+roomLabels.visible=false;
+// hip roof helper
+function hip(cx,cz,w,d,base=WALL,c=C.tile){w+=2*EAVE;d+=2*EAVE;let sw=w<d;if(sw)[w,d]=[d,w];
+ const rh=d/2*PITCH,rl=w-d,hw=w/2,hd=d/2,v=[-hw,0,-hd,hw,0,-hd,hw,0,hd,-hw,0,hd,-rl/2,rh,0,rl/2,rh,0];
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.setIndex([0,4,5,0,5,1,1,5,2,2,5,4,2,4,3,3,4,0]);g.computeVertexNormals();
+ const m=new THREE.Mesh(g,M(c));m.position.set(cx,base,cz);if(sw)m.rotation.y=Math.PI/2;m.castShadow=true;roofs.add(m);
+ const R=new THREE.Group();R.position.copy(m.position);R.rotation.y=m.rotation.y;roofs.add(R);
+ [[w,.6,.2,0,hd],[w,.6,.2,0,-hd],[.2,.6,d,hw,0],[.2,.6,d,-hw,0]].forEach(q=>B(R,q[0],q[1],q[2],q[3],-.2,q[4],C.trim));}
+const RB=(x0,y0,x1,y1,base)=>hip(XX((x0+x1)/2),ZZ((y0+y1)/2),(x1-x0)*FT,(y1-y0)*FT,base);
+RB(225,363,372,601,WALL-.1);      // garage/laundry block
+RB(372,363,628,601);              // living/kitchen/family core
+RB(628,190,798,668,WALL+.05);     // bedroom wing (front-to-back, right side)
+RB(600,470,660,601,WALL-.15);     // foyer infill
+// small front gable over entry (foyer)
+{const ex=XX(629),ez=ZZ(575)+3; B(house,1,WALL,1,XX(600)+.5,WALL/2,ZZ(601)-.2,C.stucco); const g=gable(ex,ez,XX(660)-XX(598),8,'z',WALL-.1); }
+// garage door faces street
+const garageX=XX((GAR[0]+GAR[2])/2), garageFrontZ=ZZ(GAR[3]);
+B(house,(GAR[2]-GAR[0])*FT*.82,7.5,.3,garageX,3.75,garageFrontZ+.45,0xf3eee6);
+for(let i=1;i<4;i++)B(house,(GAR[2]-GAR[0])*FT*.82,.1,.35,garageX,i*1.9,garageFrontZ+.5,0xcfc8bc);
+// front door in foyer recess, windows (dark frames)
+B(house,3.5,7,.3,XX(629),3.5,ZZ(575)+.45,0x4a3828);
+const winZ=(x,py,w=5,h=4.5,y=5)=>B(house,w,h,.9,x,y,ZZ(py),C.win), winX=(px,z,w=5,h=4.5,y=5)=>B(house,.9,h,w,XX(px),y,z,C.win);
+winZ(XX(420),601,6);winZ(XX(540),601,6);winZ(XX(728),668,6);              // front: living x2, bedroom 4
+winX(798,ZZ(436),4);winX(798,ZZ(540),4);winX(798,ZZ(300),5);              // right side bedrooms/primary
+winZ(XX(420),363,5,4.5);winZ(XX(545),363,6,7,3.8);winZ(XX(680),190,6,4);    // back: dining bay, family slider, primary
+winX(628,ZZ(300),6,7,3.8);winX(225,ZZ(395),3,3,6);
+// covered back porch: flat white roof on columns (plan 'PORCH' 37'1"x23')
+const PORCH=[350,268,628,363];
+{const[x0,y0,x1,y1]=PORCH,w=(x1-x0)*FT,d=(y1-y0)*FT,cx=XX((x0+x1)/2),cz=ZZ((y0+y1)/2);
+ B(house,w,.4,d,cx,.2,cz,C.slab); B(roofs,w+1.5,.6,d+1,cx,WALL-.3,cz-.5,0xf4f2ec);
+ [350,410,470,535,628].forEach(px=>B(house,1.1,WALL-.6,1.1,XX(px),(WALL-.6)/2,ZZ(y0)+.5,C.stucco));
+ roomLabels.add(label('Covered porch',cx,cz,12,WALL+1)); }
+// white front pergola (front-left, between garage and living room front walk)
+{const x0=XX(330),x1=XX(470),z0=ZZ(601)+1,z1=ZZ(601)+12;
+ for(const x of [x0,x1])for(const z of [z0+1,z1])B(house,.6,8,.6,x,4,z,C.trim);
+ for(const z of [z0+1,z1])B(house,x1-x0+2,.8,.4,(x0+x1)/2,8.2,z,C.trim);
+ for(let x=x0-.5;x<=x1+.5;x+=1.5)B(house,.3,.4,z1-z0+3,x,8.8,(z0+z1)/2,C.trim);}
+// low front courtyard wall (garden wall in front of living/foyer)
+{const z=ZZ(601)+22,xa=XX(372),xb=XX(798),gap=[XX(600),XX(660)];
+ seg(xa,z,gap[0],z,.8,3,C.stucco); seg(gap[1],z,xb,z,.8,3,C.stucco); seg(xa,ZZ(601)+12,xa,z,.8,3,C.stucco);}
+label('Garage',garageX,garageFrontZ+3,10,12);
+// ================= OUTBUILDINGS (approximate positions) =================
+const out=new THREE.Group(); scene.add(out);
+// small stucco outbuilding with gable roof – right/back area
+{const x=62,z=-62,w=16,d=20; B(out,w,9,d,x,4.5,z,C.stucco); const r=gable(x,z,w,d,'x',9); r.scale.setScalar(1); B(out,3,7,.2,x,3.5,z+d/2+.15,0x5a4a3a); label('Stucco outbuilding',x,z,14,17);}
+// wood cabin / shed with metal roof – back-left corner
+{const x=-80,z=-82,w=14,d=12; B(out,w,8,d,x,4,z,C.wood); const r=B(roofs,w+3,.3,d+3,x,8.4,z,C.metal); r.rotation.x=.08; label('Wood cabin (metal roof)',x,z,16,14);}
+// ================= FENCING =================
+const fence=new THREE.Group(); scene.add(fence);
+const linkMat=new THREE.MeshStandardMaterial({color:0x9aa0a0,transparent:true,opacity:.35,side:THREE.DoubleSide,metalness:.6});
+const GATE={x:garageX,w:17}; const PED={w:4}, FRONT_PICKET={x0:-H,x1:H};       
+function chainRun(x0,z0,x1,z1){const L=Math.hypot(x1-x0,z1-z0),a=-Math.atan2(z1-z0,x1-x0),mx=(x0+x1)/2,mz=(z0+z1)/2;
+ B(fence,L,2.5,.7,mx,1.25,mz,C.block,a); const l=B(fence,L,4,.05,mx,4.5,mz,linkMat,a); l.castShadow=false;
+ const n=Math.round(L/10); for(let i=0;i<=n;i++){const t=i/n;B(fence,.6,7,.6,x0+(x1-x0)*t,3.5,z0+(z1-z0)*t,C.block);} }
+function picketRun(x0,x1,z){const L=x1-x0,mx=(x0+x1)/2; B(fence,L,1.5,.8,mx,.75,z,C.block);
+ B(fence,L,.2,.2,mx,2,z,C.iron);B(fence,L,.2,.2,mx,6.3,z,C.iron);
+ for(let x=x0;x<=x1;x+=.6) B(fence,.12,5,.12,x,4,z,C.iron); for(let x=x0;x<=x1;x+=10) B(fence,1.2,7.5,1.2,x,3.75,z,C.block);}
+chainRun(-H,-H,H,-H); chainRun(-H,-H,-H,H); chainRun(H,-H,H,H);
+// front: pillar | sliding gate | pillar | pedestrian gate | pillar
+const gL=GATE.x-GATE.w/2, gR=GATE.x+GATE.w/2, pR=gR+2+PED.w;
+picketRun(-H,gL-1,H); picketRun(pR+1,H,H);
+function pillar(x){B(fence,2,8.5,2,x,4.25,H,C.block);B(fence,2.6,.5,2.6,x,8.75,H,C.block);}
+[gL-1,gR+1,pR+1].forEach(pillar);
+// arched picket gate panel (x0..x1), base height b, side height hs, crown hc
+function archGate(x0,x1,z,b,hs,hc,sp=.5){const L=x1-x0,top=x=>hs+(hc-hs)*Math.sin(Math.PI*(x-x0)/L);
+ for(let x=x0+.1;x<x1;x+=sp){const t=top(x);B(fence,.12,t-b,.12,x,(t+b)/2,z,C.iron);}
+ B(fence,L,.25,.25,(x0+x1)/2,b,z,C.iron);B(fence,L,.2,.2,(x0+x1)/2,b+1,z,C.iron);
+ const pts=[];for(let i=0;i<=24;i++){const x=x0+L*i/24;pts.push(new THREE.Vector3(x,top(x),z));}
+ fence.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),48,.12,6),M(C.iron)));
+ [x0,x1].forEach(x=>B(fence,.3,hs-b,.3,x,(hs+b)/2,z,C.iron));}
+// sliding gate (closed), on a track; 'L' monogram center
+archGate(gL,gR,H,.5,6,7.5); B(fence,GATE.w+12,.2,.4,GATE.x-6,.1,H,0x555555);
+{const mx=GATE.x,my=4.2,z=H+.15;B(fence,2.4,2.4,.15,mx,my,z,C.iron);B(fence,2,2,.18,mx,my,z,0x2e2e2e);
+B(fence,.35,1.5,.25,mx-.4,my+.1,z+.05,0xd8d8d8);B(fence,1.1,.35,.25,mx+.0,my-.5,z+.05,0xd8d8d8);}
+// pedestrian swing gate (closed)
+archGate(gR+2,pR,H,.5,6,7);
+// gravel driveway gate -> garage
+{const z0=garageFrontZ, L=H+40-z0; const d=new THREE.Mesh(new THREE.PlaneGeometry(GATE.w,L),M(C.dirt2));d.rotation.x=-Math.PI/2;d.position.set(GATE.x,.06,z0+L/2);d.receiveShadow=true;site.add(d);}
+{const L=82;const rd=new THREE.Mesh(new THREE.PlaneGeometry(20,L),M(0x9c8566));rd.rotation.x=-Math.PI/2;rd.position.set(GATE.x,.07,H+L/2);rd.receiveShadow=true;site.add(rd);}
+// ================= JUNGLE (outside fence only; instanced, seeded) =================
+const jungle=new THREE.Group(); scene.add(jungle);
+{let seed=20261009; const rnd=()=>((seed=(seed*1664525+1013904223)>>>0)/4294967296);
+ const IN=H+4, OUT=H+78, clearX=GATE.x, clearW=13;
+ const ok=(x,z)=>{const m=Math.max(Math.abs(x),Math.abs(z));if(m<IN||m>OUT)return false;if(z>H&&Math.abs(x-clearX)<clearW)return false; /* driveway + front road strip clear */return true;};
+ const pts=n=>{const a=[];while(a.length<n){const x=(rnd()*2-1)*OUT,z=(rnd()*2-1)*OUT;if(ok(x,z))a.push([x,z]);}return a;};
+ const dummy=new THREE.Object3D(), col=new THREE.Color();
+ function inst(geo,mat,list,fn){const im=new THREE.InstancedMesh(geo,mat,list.length);list.forEach((p,i)=>{fn(dummy,p,i);dummy.updateMatrix();im.setMatrixAt(i,dummy.matrix);
+   if(mat.vertexColors===false&&im.instanceColor!==undefined){}});im.castShadow=true;im.receiveShadow=true;jungle.add(im);return im;}
+ const greens=[0x2f5a1f,0x3d6b26,0x264d1a,0x4a7a2c,0x355f22];
+ // broadleaf canopy trees
+ const T=pts(520).map(p=>({x:p[0],z:p[1],h:15+rnd()*25,r:0,ry:rnd()*6.28,c:greens[Math.floor(rnd()*5)]})); T.forEach(t=>t.r=t.h*(.16+rnd()*.1));
+ inst(new THREE.CylinderGeometry(.6,1.1,1,6),M(0x5b4632),T,(d,t)=>{d.position.set(t.x,t.h*.35,t.z);d.scale.set(t.h/70,t.h*.7,t.h/70);d.rotation.set(0,0,0);});
+ const can=inst(new THREE.IcosahedronGeometry(1,1),new THREE.MeshStandardMaterial({roughness:1,flatShading:true}),T,(d,t)=>{d.position.set(t.x,t.h*.78,t.z);d.scale.set(t.r,t.r*.6,t.r*(.8+rnd()*.4));d.rotation.set(0,t.ry,0);});
+ T.forEach((t,i)=>can.setColorAt(i,col.set(t.c)));
+ // palms
+ const Pm=pts(110).map(p=>({x:p[0],z:p[1],h:15+rnd()*15,ry:rnd()*6.28,l:rnd()*.2}));
+ inst(new THREE.CylinderGeometry(.5,.8,1,6),M(0x8a7558),Pm,(d,p)=>{d.position.set(p.x,p.h/2,p.z);d.scale.set(1,p.h,1);d.rotation.set(p.l,0,0);});
+ const fr=[];Pm.forEach(p=>{for(let k=0;k<8;k++)fr.push({...p,a:p.ry+k*Math.PI/4});});
+ const fg=new THREE.ConeGeometry(.9,7,4);fg.translate(0,3.5,0);
+ inst(fg,M(0x3f7a2a),fr,(d,f)=>{d.position.set(f.x,f.h,f.z);d.rotation.set(0,f.a,0);d.rotateX(1.9);d.scale.set(1,1,.25);});
+ // understory shrubs
+ const S=pts(1400).map(p=>({x:p[0],z:p[1],r:2+rnd()*4,c:greens[Math.floor(rnd()*5)]}));
+ const sh=inst(new THREE.IcosahedronGeometry(1,0),new THREE.MeshStandardMaterial({roughness:1,flatShading:true}),S,(d,b)=>{d.position.set(b.x,b.r*.5,b.z);d.scale.set(b.r,b.r*.8,b.r);d.rotation.set(0,b.r,0);});
+ S.forEach((b,i)=>sh.setColorAt(i,col.set(b.c)));
+ // darker jungle floor ring
+}
+// ================= PLACEABLES (reserved – none yet) =================
+export const placeables={types:{},items:[],layer:new THREE.Group()}; scene.add(placeables.layer); window.placeables=placeables;
+// ================= INFO / UI =================
+const cond=3600;
+document.getElementById('info').innerHTML=`Conditioned ≈ ${cond} sq ft (base plan ≈ ${Math.round(PHX_COND)} sq ft, scale ×${(FT*PLAN_PX_FT).toFixed(3)})<br>Garage ${Math.round((GAR[2]-GAR[0])*FT)}×${Math.round((GAR[3]-GAR[1])*FT)} ft (not counted)`;
+const views={gate:[garageX-30,10,H+40],top:[0,330,.01],'3d':[190,230,300],front:[GATE.x,16,H+82]};
+const setView=v=>{cam.position.set(...views[v]);controls.target.set(...(v=='gate'?[garageX,4,H]:v=='front'?[GATE.x*.5,4,HOUSE_Z+20]:[0,0,0]));controls.update();};
+btnTop.onclick=()=>setView('top'); btn3d.onclick=()=>setView('3d'); btnFront.onclick=()=>setView('front');
+document.getElementById('roof').onchange=e=>roofs.visible=e.target.checked;
+document.getElementById('grid').onchange=e=>grid.visible=grid50.visible=e.target.checked;
+const hv=location.hash.slice(1); setView(views[hv]?hv:'3d'); if(hv=='noroof'){roofs.visible=false;roomLabels.visible=true;document.getElementById('roof').checked=false;document.getElementById('rooms').checked=true;setView('top');}
+document.getElementById('jungle').onchange=e=>jungle.visible=e.target.checked;
+document.getElementById('rooms').onchange=e=>roomLabels.visible=e.target.checked;
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+(function loop(){controls.update();renderer.render(scene,cam);requestAnimationFrame(loop);})(); window.READY=true;
+</script></body></html>
