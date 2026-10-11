@@ -109,11 +109,66 @@ function seg(x0,z0,x1,z1,t,h,c,grp=house){const L=Math.hypot(x1-x0,z1-z0);if(L<.
 // floor slab
 {const sh=new THREE.Shape(EXT.map(p=>new THREE.Vector2(XX(p[0]),-ZZ(p[1]))));const m=new THREE.Mesh(new THREE.ShapeGeometry(sh),M(0xd9d2c4));m.rotation.x=-Math.PI/2;m.position.y=.25;m.receiveShadow=true;house.add(m);}
 // exterior walls
-EXT.forEach((p,i)=>{const q=EXT[(i+1)%EXT.length];seg(XX(p[0]),ZZ(p[1]),XX(q[0]),ZZ(q[1]),.8,WALL,C.stucco);});
+const DOORS=[ // plan px: x,y, width px, wall orientation 'h'|'v', swing dir (+1/-1 toward +y/+x), hinge side (+1/-1)
+ [644,575,24,'h',-1,1],          // front door (foyer)
+ [600,520,34,'v',-1,1],          // foyer -> living (opening)
+ [372,445,26,'v',1,-1],          // garage -> house
+ [290,415,22,'v',-1,1],[310,400,20,'h',-1,1], // hall, bath
+ [450,363,0,'h',0,0],            // (dining bay window handled as window)
+ [705,430,22,'v',1,1],[705,530,22,'v',1,-1],[700,583,22,'h',1,1],  // bedrooms 2,3,4
+ [655,470,20,'h',-1,1],          // bath 2
+ [690,395,24,'h',-1,-1],         // primary bedroom entry
+ [715,330,20,'v',1,1],[760,265,20,'h',-1,1],
+ // added for full circulation (swing 0 = cased opening, no leaf)
+ [628,530,30,'v',1,1],             // entry -> foyer/hall
+ [330,428,22,'h',1,-1],            // garage -> laundry hall
+ [372,412,14,'v',0,0],             // laundry hall -> dining/kitchen
+ [470,392,30,'v',0,0],[470,455,40,'v',0,0], // dining & kitchen open to family room
+ [535,492,60,'h',0,0],             // living <-> family room
+ [628,481,18,'v',0,0],             // family room -> foyer/hall
+ [694,470,18,'h',0,0],
+ [421,492,36,'h',0,0]];            // living room <-> kitchen            // bedroom hall -> foyer/hall // primary bath, WIC
+const SLIDERS=[[545,363,50,'h'],[628,300,40,'v']]; // sliding doors to porch
+const WINDOWS=[[420,601,40,'h'],[540,601,40,'h'],[728,668,40,'h'],[798,436,30,'v'],[798,540,30,'v'],[798,300,36,'v'],[420,363,36,'h'],[680,190,40,'h'],[225,395,22,'v']];
+// ---- walls with real openings (doors 7 ft head; windows 3 ft sill / 7 ft head) ----
+const OPEN=[]; // [x,y,widthPx,orient,sillFt,headFt,glass]
+DOORS.forEach(d=>{if(d[2])OPEN.push([d[0],d[1],d[2],d[3],0,7,false]);});
+SLIDERS.forEach(d=>OPEN.push([d[0],d[1],d[2],d[3],0,7,true]));
+WINDOWS.forEach(d=>OPEN.push([d[0],d[1],d[2],d[3],3,7,true]));
+OPEN.push([(GAR[0]+GAR[2])/2,601,(GAR[2]-GAR[0])*.82,'h',0,7.8,false]); // garage door opening
+const glassMat=new THREE.MeshStandardMaterial({color:0x223344,transparent:true,opacity:.45,roughness:.1,metalness:.3,side:THREE.DoubleSide});
+function wallRun(x0,y0,x1,y1,t,h,c,grp){const hor=Math.abs(y1-y0)<1;const a0=hor?Math.min(x0,x1):Math.min(y0,y1),a1=hor?Math.max(x0,x1):Math.max(y0,y1),k=hor?y0:x0;
+ const ops=OPEN.filter(o=>(o[3]=='h')==hor&&Math.abs((hor?o[1]:o[0])-k)<3&&(hor?o[0]:o[1])>a0&&(hor?o[0]:o[1])<a1).map(o=>{const ctr=hor?o[0]:o[1];return[Math.max(a0,ctr-o[2]/2),Math.min(a1,ctr+o[2]/2),o[4],o[5],o[6]];}).sort((p,q)=>p[0]-q[0]);
+ const piece=(b0,b1,y0f,y1f,mat)=>{if(b1-b0<.3||y1f-y0f<.05)return;const L=(b1-b0)*FT,cm=(b0+b1)/2,hh=y1f-y0f;
+   const m=new THREE.Mesh(new THREE.BoxGeometry(hor?L+(y0f==0&&mat!==glassMat?t:0):t,hh,hor?t:L),typeof mat=='number'?M(mat):mat);
+   m.position.set(hor?XX(cm):XX(k),y0f+hh/2,hor?ZZ(k):ZZ(cm));m.castShadow=m.receiveShadow=mat!==glassMat;grp.add(m);};
+ let cur=a0;ops.forEach(([b0,b1,sill,head,glass])=>{piece(cur,b0,0,h,c);if(sill>0)piece(b0,b1,0,sill,c);piece(b0,b1,head,h,c);cur=b1;});piece(cur,a1,0,h,c);
+ // thin glass panes for windows / sliders
+ ops.forEach(([b0,b1,sill,head,glass])=>{if(!glass)return;const L=(b1-b0)*FT,cm=(b0+b1)/2,g=new THREE.Mesh(new THREE.BoxGeometry(hor?L:.08,head-sill,hor?.08:L),glassMat);g.position.set(hor?XX(cm):XX(k),sill+(head-sill)/2,hor?ZZ(k):ZZ(cm));grp.add(g);});}
+EXT.forEach((p,i)=>{const q=EXT[(i+1)%EXT.length];wallRun(p[0],p[1],q[0],q[1],.8,WALL,C.stucco,house);});
 // interior walls (room edges) + labels
 const intW=new THREE.Group(); house.add(intW);
-ROOMS.forEach(([n,x0,y0,x1,y1])=>{const a=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]];a.forEach((p,i)=>{const q=a[(i+1)%4];seg(XX(p[0]),ZZ(p[1]),XX(q[0]),ZZ(q[1]),.35,WALL-.1,0xf6efe0,intW);});
- const w=Math.round((x1-x0)*FT),d=Math.round((y1-y0)*FT); const l=label(n+(n.length<14?` ${w}×${d}`:''),XX((x0+x1)/2),ZZ((y0+y1)/2),Math.min(14,(x1-x0)*FT*.9),WALL+1);roomLabels.add(l);});
+// front door: dark wood panel + white frame in the entry opening (visible from street)
+{const w=24*FT,x=XX(644),z=ZZ(575);B(house,w-.3,6.9,.25,x,3.45,z+.3,0x6b3f22);
+ for(let i=0;i<3;i++)B(house,w-1.2,1.4,.1,x,1.5+i*2,z+.47,0x4a2a15); B(house,.25,.25,.35,x+w/2-.7,3.5,z+.55,0xd4b46a);
+ B(house,w+.6,.4,.5,x,7.1,z+.05,C.trim);[-1,1].forEach(k=>B(house,.3,7,.5,x+k*(w/2+.1),3.5,z+.05,C.trim));}
+// interior partitions: unique edges (shared edges built once), inset from exterior
+const OPEN_EDGES=['372,420,470,420','470,363,470,420','470,420,470,492','470,363,470,492']; // removed partitions only: dining/kitchen, family room/kitchen+dining (great room)
+{const seen=new Set(OPEN_EDGES);ROOMS.forEach(([n,x0,y0,x1,y1])=>[[x0,y0,x1,y0],[x1,y0,x1,y1],[x0,y1,x1,y1],[x0,y0,x0,y1]].forEach(e=>{const key=e.join(',');if(seen.has(key))return;seen.add(key);
+  const onExt=EXT.some((p,i)=>{const q=EXT[(i+1)%EXT.length];return (e[1]==e[3]&&p[1]==q[1]&&Math.abs(p[1]-e[1])<2&&Math.min(p[0],q[0])<=Math.min(e[0],e[2])+1&&Math.max(p[0],q[0])>=Math.max(e[0],e[2])-1)||(e[0]==e[2]&&p[0]==q[0]&&Math.abs(p[0]-e[0])<2&&Math.min(p[1],q[1])<=Math.min(e[1],e[3])+1&&Math.max(p[1],q[1])>=Math.max(e[1],e[3])-1);});
+  if(e[0]==e[2]&&e[0]>600&&e[0]<658&&Math.max(e[1],e[3])>575){e=e.slice();e[3]=Math.min(e[3],575);e[1]=Math.min(e[1],575);} // clip stub past entry wall
+  if(e[1]==e[3]&&e[1]>575&&e[1]<=601&&Math.min(e[0],e[2])<658){e=e.slice();e[0]=Math.max(Math.min(e[0],e[2]),658);e[2]=Math.max(e[0],e[2]);if(e[2]-e[0]<1)return;} // foyer edge outside entry recess
+  if(!onExt)wallRun(e[0],e[1],e[2],e[3],.45,WALL-.05,0xf6efe0,intW);}));}
+// floors: per-room finished floor (tile tone) slightly above slab
+const floorMats={def:M(0xe6dccb),wet:M(0xd5dde0),gar:M(0xbab4aa)};
+ROOMS.forEach(([n,x0,y0,x1,y1])=>{const f=new THREE.Mesh(new THREE.PlaneGeometry((x1-x0)*FT-.2,(y1-y0)*FT-.2),/bath|laundry/i.test(n)?floorMats.wet:/garage/i.test(n)?floorMats.gar:floorMats.def);
+ f.rotation.x=-Math.PI/2;f.position.set(XX((x0+x1)/2),.3,ZZ((y0+y1)/2));f.receiveShadow=true;house.add(f);});
+// room labels: name + exact dimensions (same values as floor plan), readable two-line sprites
+function roomLabel(name,dims,x,z,maxW=9.6){const c=document.createElement('canvas');c.width=512;c.height=160;const g=c.getContext('2d');g.fillStyle='rgba(255,255,255,.88)';g.strokeStyle='#333';g.lineWidth=4;
+ g.beginPath();g.roundRect(6,6,500,148,22);g.fill();g.stroke();g.fillStyle='#111';g.textAlign='center';g.font='bold 54px sans-serif';g.fillText(name,256,70,480);g.font='44px sans-serif';g.fillText(dims,256,128,480);
+ const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthTest:false}));sp.center.set(.5,.5);sp.renderOrder=30;
+ const bw=Math.min(9.6,maxW);sp.scale.set(bw,bw/3.2,1);sp.position.set(x,WALL+1.5,z);sp.userData.base=bw;roomLabels.add(sp);return sp;}
+const ROOM_DIMS={};ROOMS.forEach(([n,x0,y0,x1,y1])=>{const d=`${fmtFt((x1-x0)*FT)} × ${fmtFt((y1-y0)*FT)}`;ROOM_DIMS[n+'@'+x0+','+y0]=d;roomLabel(n,d,XX((x0+x1)/2),ZZ((y0+y1)/2),Math.max((x1-x0)*FT,(y1-y0)*FT*.0+ (x1-x0)*FT)*.92);});
 roomLabels.visible=false;
 // hip roof helper
 function hip(cx,cz,w,d,base=WALL,c=C.tile){w+=2*EAVE;d+=2*EAVE;let sw=w<d;if(sw)[w,d]=[d,w];
@@ -141,18 +196,14 @@ const garageX=XX((GAR[0]+GAR[2])/2), garageFrontZ=ZZ(GAR[3]);
 B(house,(GAR[2]-GAR[0])*FT*.82,7.5,.3,garageX,3.75,garageFrontZ+.45,0xf3eee6);
 for(let i=1;i<4;i++)B(house,(GAR[2]-GAR[0])*FT*.82,.1,.35,garageX,i*1.9,garageFrontZ+.5,0xcfc8bc);
 // front door in foyer recess, windows (dark frames)
-B(house,3.5,7,.3,XX(629),3.5,ZZ(575)+.45,0x4a3828);
 const winZ=(x,py,w=5,h=4.5,y=5)=>B(house,w,h,.9,x,y,ZZ(py),C.win), winX=(px,z,w=5,h=4.5,y=5)=>B(house,.9,h,w,XX(px),y,z,C.win);
-winZ(XX(420),601,6);winZ(XX(540),601,6);winZ(XX(728),668,6);              // front: living x2, bedroom 4
-winX(798,ZZ(436),4);winX(798,ZZ(540),4);winX(798,ZZ(300),5);              // right side bedrooms/primary
-winZ(XX(420),363,5,4.5);winZ(XX(545),363,6,7,3.8);winZ(XX(680),190,6,4);    // back: dining bay, family slider, primary
-winX(628,ZZ(300),6,7,3.8);winX(225,ZZ(395),3,3,6);
+// windows & doors are real openings in wallRun()
 // covered back porch: flat white roof on columns (plan 'PORCH' 37'1"x23')
 const PORCH=[350,268,628,363];
 {const[x0,y0,x1,y1]=PORCH,w=(x1-x0)*FT,d=(y1-y0)*FT,cx=XX((x0+x1)/2),cz=ZZ((y0+y1)/2);
  B(house,w,.4,d,cx,.2,cz,C.slab); B(roofs,w+1.5,.6,d+1,cx,WALL-.3,cz-.5,0xf4f2ec);
  [350,410,470,535,628].forEach(px=>B(house,1.1,WALL-.6,1.1,XX(px),(WALL-.6)/2,ZZ(y0)+.5,C.stucco));
- roomLabels.add(label('Covered porch',cx,cz,12,WALL+1)); }
+ roomLabel('Covered porch',`${fmtFt(278*FT)} × ${fmtFt(95*FT)}`,cx,cz); }
 // white front pergola (front-left, between garage and living room front walk)
 {const x0=XX(330),x1=XX(470),z0=ZZ(601)+1,z1=ZZ(601)+12;
  for(const x of [x0,x1])for(const z of [z0+1,z1])B(house,.6,8,.6,x,4,z,C.trim);
@@ -228,18 +279,6 @@ const jungle=new THREE.Group(); scene.add(jungle);
  // darker jungle floor ring
 }
 // ================= 2D FLOOR PLAN LAYER (drawn on slab) =================
-const DOORS=[ // plan px: x,y, width px, wall orientation 'h'|'v', swing dir (+1/-1 toward +y/+x), hinge side (+1/-1)
- [629,575,28,'h',-1,1],          // front door (foyer)
- [600,520,34,'v',-1,1],          // foyer -> living (opening)
- [372,445,26,'v',1,-1],          // garage -> house
- [290,415,22,'v',-1,1],[310,400,20,'h',-1,1], // hall, bath
- [450,363,0,'h',0,0],            // (dining bay window handled as window)
- [705,430,22,'v',1,1],[705,530,22,'v',1,-1],[700,583,22,'h',1,1],  // bedrooms 2,3,4
- [655,470,20,'h',-1,1],          // bath 2
- [690,395,24,'h',-1,-1],         // primary bedroom entry
- [715,330,20,'v',1,1],[760,265,20,'h',-1,1]]; // primary bath, WIC
-const SLIDERS=[[545,363,50,'h'],[628,300,40,'v']]; // sliding doors to porch
-const WINDOWS=[[420,601,40,'h'],[540,601,40,'h'],[728,668,40,'h'],[798,436,30,'v'],[798,540,30,'v'],[798,300,36,'v'],[420,363,36,'h'],[680,190,40,'h'],[225,395,22,'v']];
 const PB=[205,170,820,690], PS=3.2; // plan bbox (px) and canvas px per plan px
 function fmtFt(f){const ft=Math.floor(f),inch=Math.round((f-ft)*12);return inch==12?`${ft+1}'0"`:`${ft}'${inch}"`;}
 function drawPlan(){const W=(PB[2]-PB[0])*PS,Hh=(PB[3]-PB[1])*PS,cv=document.createElement('canvas');cv.width=W;cv.height=Hh;const g=cv.getContext('2d');
@@ -249,11 +288,13 @@ function drawPlan(){const W=(PB[2]-PB[0])*PS,Hh=(PB[3]-PB[1])*PS,cv=document.cre
  {const[a,b]=T(350,268),[c,d]=T(628,363);g.setLineDash([18,12]);g.strokeStyle='#555';g.lineWidth=4;g.strokeRect(a,b,c-a,d-b);g.setLineDash([]);}
  // interior walls
  g.strokeStyle='#222';g.lineWidth=7;g.lineCap='square';ROOMS.forEach(([n,x0,y0,x1,y1])=>{const[a,b]=T(x0,y0),[c,d]=T(x1,y1);g.strokeRect(a,b,c-a,d-b);});
+ {const[a,b]=T(628,583),[c]=T(658,583);g.clearRect(a-6,b-8,c-a+2,16);const[p,q]=T(628,575),[,r]=T(628,583);g.clearRect(p-8,q+9,16,r-q);}
+ OPEN_EDGES.forEach(k=>{const[x0,y0,x1,y1]=k.split(',').map(Number),[a,b]=T(x0,y0),[c,d]=T(x1,y1);g.fillStyle='#fbfaf6';if(y0==y1)g.fillRect(a+5,b-5,c-a-10,10);else g.fillRect(a-5,b+5,10,d-b-10);});
  // exterior walls
  g.lineWidth=16;g.beginPath();EXT.forEach((p,i)=>{const q=T(...p);i?g.lineTo(...q):g.moveTo(...q);});g.closePath();g.stroke();
  // openings: erase wall, draw door leaf + swing arc
  const gap=(x,y,w,o,lw)=>{const[a,b]=T(x,y),L=w*PS;g.fillStyle='#fbfaf6';o=='h'?g.fillRect(a-L/2,b-lw/2-1,L,lw+2):g.fillRect(a-lw/2-1,b-L/2,lw+2,L);};
- DOORS.forEach(([x,y,w,o,sw,hg])=>{if(!w)return;gap(x,y,w,o,18);const[a,b]=T(x,y),L=w*PS;g.strokeStyle='#222';g.lineWidth=3;
+ DOORS.forEach(([x,y,w,o,sw,hg])=>{if(!w)return;gap(x,y,w,o,18);if(!sw)return;const[a,b]=T(x,y),L=w*PS;g.strokeStyle='#222';g.lineWidth=3;
    if(o=='h'){const hx=a+hg*L/2,hy=b;g.beginPath();g.moveTo(hx,hy);g.lineTo(hx,hy+sw*L);g.stroke();g.beginPath();g.lineWidth=2;
      const a0=sw>0?Math.PI/2:-Math.PI/2,a1=hg>0?Math.PI:0;g.arc(hx,hy,L,Math.min(a0,a1),Math.max(a0,a1));g.stroke();
      if(hg<0){} }
@@ -268,9 +309,8 @@ function drawPlan(){const W=(PB[2]-PB[0])*PS,Hh=(PB[3]-PB[1])*PS,cv=document.cre
  WINDOWS.forEach(([x,y,w,o])=>{gap(x,y,w,o,16);const[a,b]=T(x,y),L=w*PS;g.strokeStyle='#1d4f91';g.lineWidth=2;g.beginPath();
    for(const k of[-7,0,7]){if(o=='h'){g.moveTo(a-L/2,b+k);g.lineTo(a+L/2,b+k);}else{g.moveTo(a+k,b-L/2);g.lineTo(a+k,b+L/2);}}g.stroke();});
  // room names + dims
- g.fillStyle='#111';g.textAlign='center';ROOMS.forEach(([n,x0,y0,x1,y1])=>{const[a,b]=T((x0+x1)/2,(y0+y1)/2),w=(x1-x0)*FT,d=(y1-y0)*FT,box=(x1-x0)*PS;
+ g.fillStyle='#111';g.textAlign='center';/* room names drawn as 3D labels */[].forEach(([n,x0,y0,x1,y1])=>{const[a,b]=T((x0+x1)/2,(y0+y1)/2),w=(x1-x0)*FT,d=(y1-y0)*FT,box=(x1-x0)*PS;
    const fs=Math.max(14,Math.min(34,box/8));g.font=`bold ${fs}px sans-serif`;g.fillText(n.toUpperCase(),a,b);g.font=`${fs*.8}px sans-serif`;g.fillText(`${fmtFt(w)} × ${fmtFt(d)}`,a,b+fs*1.05);});
- {const[a,b]=T(489,315);g.font='bold 30px sans-serif';g.fillText('COVERED PORCH',a,b);g.font='24px sans-serif';g.fillText(`${fmtFt(278*FT)} × ${fmtFt(95*FT)}`,a,b+30);}
  {const[a,b]=T(250,680);g.textAlign='left';g.font='bold 26px sans-serif';g.fillText(`FLOOR PLAN · ${Math.round(cond)} sq ft conditioned`,a,b);}
  const t=new THREE.CanvasTexture(cv);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;return t;}
 const cond=3600;
@@ -322,16 +362,21 @@ document.getElementById('info').innerHTML=`Conditioned ≈ ${cond} sq ft (base p
 const views={gate:[garageX-30,10,H+40],top:[0,330,.01],'3d':[190,230,300],front:[GATE.x,16,H+82]};
 const setView=v=>{cam.position.set(...views[v]);controls.target.set(...(v=='gate'?[garageX,4,H]:v=='front'?[GATE.x*.5,4,HOUSE_Z+20]:[0,0,0]));controls.update();};
 btnTop.onclick=()=>setView('top'); btn3d.onclick=()=>setView('3d'); btnFront.onclick=()=>setView('front');
-document.getElementById('roof').onchange=e=>roofs.visible=e.target.checked;
+let roofTarget=0;function setRoof(on){roofTarget=on?0:1;document.getElementById('roof').checked=on;if(!on){roomLabels.visible=true;document.getElementById('rooms').checked=true;}roofs.visible=true;}
+document.getElementById('roof').onchange=e=>setRoof(e.target.checked);
 document.getElementById('grid').onchange=e=>grid.visible=grid50.visible=e.target.checked;
-const hv=location.hash.slice(1); setView(views[hv]?hv:'3d'); if(hv=='noroof'){roofs.visible=false;roomLabels.visible=true;document.getElementById('roof').checked=false;document.getElementById('rooms').checked=true;setView('top');}
-document.getElementById('plan').onchange=e=>{const on=e.target.checked;planLayer.visible=on;house.visible=!on;if(on)roomLabels.visible=false;roofs.visible=!on;document.getElementById('roof').checked=!on;if(on)setView('top');};
-if(hv=='plan'){document.getElementById('plan').checked=true;document.getElementById('plan').onchange({target:{checked:true}});cam.position.set(XX(511),120,ZZ(429)+.01);controls.target.set(XX(511),0,ZZ(429));}
+const hv=location.hash.slice(1); setView(views[hv]?hv:'3d'); if(hv=='kitchen'){setRoof(false);roofs.userData.k=1;cam.position.set(XX(470)-20,50,ZZ(430)+45);controls.target.set(XX(470),0,ZZ(430));}
+if(hv=='door'){cam.position.set(XX(615),6,ZZ(575)+30);controls.target.set(XX(644),4,ZZ(575));}
+if(hv=='noroof'){setRoof(false);roofs.userData.k=1;cam.position.set(XX(511)+10,95,ZZ(429)+75);controls.target.set(XX(511),0,ZZ(429));}
+document.getElementById('plan').onchange=e=>{const on=e.target.checked;planLayer.visible=on;setRoof(!on);if(on)roomLabels.visible=true;if(on)setView('top');};
+if(hv=='plan'){document.getElementById('plan').checked=true;document.getElementById('plan').onchange({target:{checked:true}});roofs.userData.k=1;cam.position.set(XX(511),120,ZZ(429)+.01);controls.target.set(XX(511),0,ZZ(429));}
 if(hv=='tiles'){cam.position.set(XX(700)+40,45,ZZ(601)+45);controls.target.set(XX(600),8,ZZ(450));}
 document.getElementById('cgrid').onchange=e=>coordGrid.visible=e.target.checked;
 if(hv=='grid'){coordGrid.visible=true;document.getElementById('cgrid').checked=true;cam.position.set(0,250,.01);controls.target.set(0,0,0);}
 document.getElementById('jungle').onchange=e=>jungle.visible=e.target.checked;
 document.getElementById('rooms').onchange=e=>roomLabels.visible=e.target.checked;
 addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
-(function loop(){controls.update();renderer.render(scene,cam);requestAnimationFrame(loop);})(); window.READY=true;
+(function loop(){{const k=roofs.userData.k||0,n=k+(roofTarget-k)*.12;roofs.userData.k=n;roofs.position.y=n*28;roofs.visible=n<.97;
+  roomLabels.children.forEach(sp=>{const d=cam.position.distanceTo(sp.position),s=Math.min(1.6,Math.max(1,d/90));sp.scale.set(sp.userData.base*s,sp.userData.base*s/3.2,1);});}
+ controls.update();renderer.render(scene,cam);requestAnimationFrame(loop);})(); window.READY=true;
 </script></body></html>
