@@ -112,24 +112,20 @@ function seg(x0,z0,x1,z1,t,h,c,grp=house){const L=Math.hypot(x1-x0,z1-z0);if(L<.
 const DOORS=[ // plan px: x,y, width px, wall orientation 'h'|'v', swing dir (+1/-1 toward +y/+x), hinge side (+1/-1)
  [644,575,24,'h',-1,1],          // front door (foyer)
  [600,520,34,'v',-1,1],          // foyer -> living (opening)
- [372,445,26,'v',1,-1],          // garage -> house
  [290,415,22,'v',-1,1],[310,400,20,'h',-1,1], // hall, bath
  [450,363,0,'h',0,0],            // (dining bay window handled as window)
- [705,430,22,'v',1,1],[705,530,22,'v',1,-1],[700,583,22,'h',1,1],  // bedrooms 2,3,4
- [655,470,20,'h',-1,1],          // bath 2
+ [705,430,22,'v',1,1],[700,583,22,'h',1,1],  // bedrooms 2,3,4
  [690,395,24,'h',-1,-1],         // primary bedroom entry
  [715,330,20,'v',1,1],[760,265,20,'h',-1,1],
  // added for full circulation (swing 0 = cased opening, no leaf)
- [628,530,30,'v',1,1],             // entry -> foyer/hall
  [330,428,22,'h',1,-1],            // garage -> laundry hall
  [372,412,14,'v',0,0],             // laundry hall -> dining/kitchen
  [470,392,30,'v',0,0],[470,455,40,'v',0,0], // dining & kitchen open to family room
- [535,492,60,'h',0,0],             // living <-> family room
- [628,481,18,'v',0,0],             // family room -> foyer/hall
  [694,470,18,'h',0,0],
+ [400,363,24,'h',1,1],             // back door: dining -> porch/back yard
  [421,492,36,'h',0,0]];            // living room <-> kitchen            // bedroom hall -> foyer/hall // primary bath, WIC
 const SLIDERS=[[545,363,50,'h'],[628,300,40,'v']]; // sliding doors to porch
-const WINDOWS=[[420,601,40,'h'],[540,601,40,'h'],[728,668,40,'h'],[798,436,30,'v'],[798,540,30,'v'],[798,300,36,'v'],[420,363,36,'h'],[680,190,40,'h'],[225,395,22,'v']];
+const WINDOWS=[[420,601,40,'h'],[540,601,40,'h'],[728,668,40,'h'],[798,436,30,'v'],[798,540,30,'v'],[798,300,36,'v'],[448,363,36,'h'],[680,190,40,'h'],[225,395,22,'v']];
 // ---- walls with real openings (doors 7 ft head; windows 3 ft sill / 7 ft head) ----
 const OPEN=[]; // [x,y,widthPx,orient,sillFt,headFt,glass]
 DOORS.forEach(d=>{if(d[2])OPEN.push([d[0],d[1],d[2],d[3],0,7,false]);});
@@ -152,9 +148,14 @@ const intW=new THREE.Group(); house.add(intW);
 {const w=24*FT,x=XX(644),z=ZZ(575);B(house,w-.3,6.9,.25,x,3.45,z+.3,0x6b3f22);
  for(let i=0;i<3;i++)B(house,w-1.2,1.4,.1,x,1.5+i*2,z+.47,0x4a2a15); B(house,.25,.25,.35,x+w/2-.7,3.5,z+.55,0xd4b46a);
  B(house,w+.6,.4,.5,x,7.1,z+.05,C.trim);[-1,1].forEach(k=>B(house,.3,7,.5,x+k*(w/2+.1),3.5,z+.05,C.trim));}
+// back door (dining -> porch): dark wood panel + white frame, facing back yard
+{const w=24*FT,x=XX(400),z=ZZ(363);B(house,w-.3,6.9,.25,x,3.45,z-.3,0x6b3f22);
+ for(let i=0;i<3;i++)B(house,w-1.2,1.4,.1,x,1.5+i*2,z-.47,0x4a2a15); B(house,.25,.25,.35,x-w/2+.7,3.5,z-.55,0xd4b46a);
+ B(house,w+.6,.4,.5,x,7.1,z-.05,C.trim);[-1,1].forEach(k=>B(house,.3,7,.5,x+k*(w/2+.1),3.5,z-.05,C.trim));}
 // interior partitions: unique edges (shared edges built once), inset from exterior
-const OPEN_EDGES=['372,420,470,420','470,363,470,420','470,420,470,492','470,363,470,492']; // removed partitions only: dining/kitchen, family room/kitchen+dining (great room)
-{const seen=new Set(OPEN_EDGES);ROOMS.forEach(([n,x0,y0,x1,y1])=>[[x0,y0,x1,y0],[x1,y0,x1,y1],[x0,y1,x1,y1],[x0,y0,x0,y1]].forEach(e=>{const key=e.join(',');if(seen.has(key))return;seen.add(key);
+const OPEN_EDGES=['372,420,470,420','470,363,470,420','470,420,470,492','470,363,470,492','628,470,628,583']; // removed partitions only: dining/kitchen, family room/kitchen+dining (great room)
+const STUB_EDGES=['628,363,628,492','470,492,628,492']; // leftover foyer corner stub (x=628 y470-492, y=492 x600-628)
+{const seen=new Set([...OPEN_EDGES,...STUB_EDGES]);ROOMS.forEach(([n,x0,y0,x1,y1])=>[[x0,y0,x1,y0],[x1,y0,x1,y1],[x0,y1,x1,y1],[x0,y0,x0,y1]].forEach(e=>{const key=e.join(',');if(seen.has(key))return;seen.add(key);
   const onExt=EXT.some((p,i)=>{const q=EXT[(i+1)%EXT.length];return (e[1]==e[3]&&p[1]==q[1]&&Math.abs(p[1]-e[1])<2&&Math.min(p[0],q[0])<=Math.min(e[0],e[2])+1&&Math.max(p[0],q[0])>=Math.max(e[0],e[2])-1)||(e[0]==e[2]&&p[0]==q[0]&&Math.abs(p[0]-e[0])<2&&Math.min(p[1],q[1])<=Math.min(e[1],e[3])+1&&Math.max(p[1],q[1])>=Math.max(e[1],e[3])-1);});
   if(e[0]==e[2]&&e[0]>600&&e[0]<658&&Math.max(e[1],e[3])>575){e=e.slice();e[3]=Math.min(e[3],575);e[1]=Math.min(e[1],575);} // clip stub past entry wall
   if(e[1]==e[3]&&e[1]>575&&e[1]<=601&&Math.min(e[0],e[2])<658){e=e.slice();e[0]=Math.max(Math.min(e[0],e[2]),658);e[2]=Math.max(e[0],e[2]);if(e[2]-e[0]<1)return;} // foyer edge outside entry recess
@@ -289,6 +290,7 @@ function drawPlan(){const W=(PB[2]-PB[0])*PS,Hh=(PB[3]-PB[1])*PS,cv=document.cre
  // interior walls
  g.strokeStyle='#222';g.lineWidth=7;g.lineCap='square';ROOMS.forEach(([n,x0,y0,x1,y1])=>{const[a,b]=T(x0,y0),[c,d]=T(x1,y1);g.strokeRect(a,b,c-a,d-b);});
  {const[a,b]=T(628,583),[c]=T(658,583);g.clearRect(a-6,b-8,c-a+2,16);const[p,q]=T(628,575),[,r]=T(628,583);g.clearRect(p-8,q+9,16,r-q);}
+ {const[a,b]=T(628,470),[,d]=T(628,492);g.fillStyle='#fbfaf6';g.fillRect(a-5,b+5,10,d-b);const[p,q]=T(600,492),[r]=T(628,492);g.fillRect(p+5,q-5,r-p,10);}
  OPEN_EDGES.forEach(k=>{const[x0,y0,x1,y1]=k.split(',').map(Number),[a,b]=T(x0,y0),[c,d]=T(x1,y1);g.fillStyle='#fbfaf6';if(y0==y1)g.fillRect(a+5,b-5,c-a-10,10);else g.fillRect(a-5,b+5,10,d-b-10);});
  // exterior walls
  g.lineWidth=16;g.beginPath();EXT.forEach((p,i)=>{const q=T(...p);i?g.lineTo(...q):g.moveTo(...q);});g.closePath();g.stroke();
@@ -366,6 +368,9 @@ let roofTarget=0;function setRoof(on){roofTarget=on?0:1;document.getElementById(
 document.getElementById('roof').onchange=e=>setRoof(e.target.checked);
 document.getElementById('grid').onchange=e=>grid.visible=grid50.visible=e.target.checked;
 const hv=location.hash.slice(1); setView(views[hv]?hv:'3d'); if(hv=='kitchen'){setRoof(false);roofs.userData.k=1;cam.position.set(XX(470)-20,50,ZZ(430)+45);controls.target.set(XX(470),0,ZZ(430));}
+if(hv=='foyer'){setRoof(false);roofs.userData.k=1;cam.position.set(XX(500),75,ZZ(720));controls.target.set(XX(600),0,ZZ(470));}
+if(hv=='doors'){setRoof(false);roofs.userData.k=1;cam.position.set(XX(860),62,ZZ(600));controls.target.set(XX(560),0,ZZ(450));}
+if(hv=='back'){setRoof(false);roofs.userData.k=1;cam.position.set(XX(560),40,ZZ(150));controls.target.set(XX(440),2,ZZ(380));}
 if(hv=='door'){cam.position.set(XX(615),6,ZZ(575)+30);controls.target.set(XX(644),4,ZZ(575));}
 if(hv=='noroof'){setRoof(false);roofs.userData.k=1;cam.position.set(XX(511)+10,95,ZZ(429)+75);controls.target.set(XX(511),0,ZZ(429));}
 document.getElementById('plan').onchange=e=>{const on=e.target.checked;planLayer.visible=on;setRoof(!on);if(on)roomLabels.visible=true;if(on)setView('top');};
