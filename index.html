@@ -3,7 +3,7 @@
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
 </head><body><div id="ui"><b>Belize House – 1 acre lot</b><br>
 <button id="btnTop">Top-down view</button><button id="btn3d">3D view</button><button id="btnFront">Front view</button><br>
-<label><input type="checkbox" id="roof" checked> Roofs</label> <label><input type="checkbox" id="grid" checked> Grid (10 ft)</label><br><label><input type="checkbox" id="rooms"> Room labels</label> <label><input type="checkbox" id="jungle" checked> Jungle</label> <label><input type="checkbox" id="plan"> Floor plan</label> <label><input type="checkbox" id="cgrid"> Coordinate grid</label>
+<label><input type="checkbox" id="roof" checked> Roofs</label> <label><input type="checkbox" id="grid" checked> Grid (10 ft)</label><br><label><input type="checkbox" id="rooms"> Room labels</label> <label><input type="checkbox" id="jungle" checked> Jungle</label> <label><input type="checkbox" id="plan"> Floor plan</label> <label><input type="checkbox" id="cgrid"> Coordinate grid</label><br>Layout <select id="layout"><option value="">None</option><option value="A">A Food security</option><option value="B">B Family compound</option><option value="C">C Food forest</option><option value="D">D Balanced leisure</option></select>
 <details id="ovBox"><summary>Floor-plan image overlay</summary><input type="file" id="ovFile" accept="image/*" style="max-width:100%"><br>
 <label><input type="checkbox" id="ovOn"> Show overlay</label><br>
 Width <input type="range" id="ovW" min="20" max="250" value="110"> <span id="ovWv">110</span> ft<br>
@@ -358,6 +358,107 @@ Object.assign(window,{cellId,cellCenter,placeAt});
  renderer.domElement.addEventListener('pointerup',e=>{if(down&&Math.hypot(e.clientX-down[0],e.clientY-down[1])<6)show(e);down=null;});
  window._showCell=show;}
 // ================= PLACEABLES (reserved – none yet) =================
+// ================= SITE-LAYOUT CONCEPTS (from sketches/concepts.py; sketch coords: x 0..208.7 left->right from street, y 0=back .. 208.7=front) =================
+const SX=x=>x-H, SZ=y=>y-H;   // sketch ft -> world
+const conceptRoot=new THREE.Group(); scene.add(conceptRoot); const CONCEPTS={};
+function makeLayer(key){
+ const G=new THREE.Group(); G.visible=false; conceptRoot.add(G); const labels=new THREE.Group(); G.add(labels);
+ const batches={}; const dummy=new THREE.Object3D();
+ const inst=(k,geo,mat,x,y,z,sx,sy,sz,ry=0,col)=>{const b=batches[k]||(batches[k]={geo,mat,list:[]});b.list.push([x,y,z,sx,sy,sz,ry,col]);};
+ const L={G,labels,
+  flat(x,y,w,h,c,yy=.12){const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),M(c));m.rotation.x=-Math.PI/2;m.position.set(SX(x+w/2),yy,SZ(y+h/2));m.receiveShadow=true;G.add(m);return m;},
+  box(x,y,w,h,ht,c,y0=0){return B(G,w,ht,h,SX(x+w/2),y0+ht/2,SZ(y+h/2),c);},
+  label(x,y,t,sub=''){const sp=roomLabel(t,sub,SX(x),SZ(y),12);roomLabels.remove(sp);sp.position.y=7;labels.add(sp);},
+  rows(x,y,w,h,step=4,vertical=false,plant=0x4f8f2f,soil=0x6b4a2e){L.flat(x,y,w,h,soil);
+   const n=vertical?Math.floor(w/step):Math.floor(h/step);
+   for(let i=0;i<n;i++){const len=vertical?h-2:w-2;
+     for(let t=1;t<len;t+=1.6){const px=vertical?x+(i+.5)*step:x+1+t,pz=vertical?y+1+t:y+(i+.5)*step,s=1+((i*7+t*13)%5)/6;
+       inst('plant',GEO.plant,MAT.plant,SX(px),0,SZ(pz),s,s*1.3,s,t);} }},
+  tree(x,y,r,palm=false){if(palm){const h=18+r;inst('ptrunk',GEO.trunk,MAT.palmTrunk,SX(x),h/2,SZ(y),.8,h,.8);for(let k=0;k<7;k++)inst('frond',GEO.frond,MAT.frond,SX(x),h,SZ(y),1,1,1,k*0.9);return;}
+   const h=r*2.2+4;inst('trunk',GEO.trunk,MAT.trunk,SX(x),h*.3,SZ(y),r/7,h*.6,r/7);inst('canopy',GEO.canopy,MAT.leaf,SX(x),h*.72,SZ(y),r,r*.8,r,r,[0x4f8a34,0x3f7a2c,0x5f9a3c][Math.floor(r*10)%3]);},
+  tank(x,y){const m=new THREE.Mesh(GEO.tank,M(0x4d7fa8));m.position.set(SX(x),3.5,SZ(y));m.scale.set(3.5,7,3.5);m.castShadow=true;G.add(m);},
+  well(x,y){const m=new THREE.Mesh(new THREE.CylinderGeometry(3,3,3,16),M(0x9a948a));m.position.set(SX(x),1.5,SZ(y));G.add(m);
+   const w=new THREE.Mesh(new THREE.CircleGeometry(2.4,16),M(0x2f5f9a));w.rotation.x=-Math.PI/2;w.position.set(SX(x),3.05,SZ(y));G.add(w);
+   [-1,1].forEach(k=>B(G,.4,6,.4,SX(x+k*2.6),3,SZ(y),C.wood));const r=B(G,7,.3,5,SX(x),6.2,SZ(y),0x8a4a2a);},
+  path(pts,w,c,y0=.15){for(let i=0;i<pts.length-1;i++){const[a,b]=[pts[i],pts[i+1]],len=Math.hypot(b[0]-a[0],b[1]-a[1]);
+   const m=new THREE.Mesh(new THREE.PlaneGeometry(len+w*.6,w),M(c));m.rotation.x=-Math.PI/2;m.rotation.z=-Math.atan2(b[1]-a[1],b[0]-a[0]);m.position.set(SX((a[0]+b[0])/2),y0,SZ((a[1]+b[1])/2));G.add(m);}},
+  water(cx,cy,rx,ry,y0=.2){const m=new THREE.Mesh(new THREE.CircleGeometry(1,28),new THREE.MeshStandardMaterial({color:0x3f8fb8,roughness:.15,metalness:.2}));m.rotation.x=-Math.PI/2;m.scale.set(rx,ry,1);m.position.set(SX(cx),y0,SZ(cy));G.add(m);
+   const e=new THREE.Mesh(new THREE.RingGeometry(1,1.12,28),M(0x8a7a5a));e.rotation.x=-Math.PI/2;e.scale.set(rx,ry,1);e.position.set(SX(cx),y0-.02,SZ(cy));G.add(e);},
+  fenceRect(x,y,w,h,ht=5){const pts=[[x,y],[x+w,y],[x+w,y+h],[x,y+h],[x,y]];for(let i=0;i<4;i++){const[a,b]=[pts[i],pts[i+1]],len=Math.hypot(b[0]-a[0],b[1]-a[1]);
+   const m=new THREE.Mesh(new THREE.PlaneGeometry(len,ht),MAT.mesh);m.position.set(SX((a[0]+b[0])/2),ht/2,SZ((a[1]+b[1])/2));m.rotation.y=-Math.atan2(b[1]-a[1],b[0]-a[0]);G.add(m);
+   for(let t=0;t<=len;t+=6)inst('post',GEO.post,MAT.post,SX(a[0]+(b[0]-a[0])*t/len),ht/2,SZ(a[1]+(b[1]-a[1])*t/len),1,ht,1);}},
+  coop(x,y,w,h){[[0,0],[w,0],[0,h],[w,h]].forEach(([dx,dy])=>inst('post',GEO.post,MAT.post,SX(x+dx*.95+.3),1.5,SZ(y+dy*.95+.3),1,3,1));L.box(x,y,w,h,5,0xd8c49a,3);
+   const r=new THREE.Mesh(new THREE.BoxGeometry(w+1.5,.3,h+1.5),M(0x9aa3a8));r.position.set(SX(x+w/2),8.4,SZ(y+h/2));r.rotation.x=.12;G.add(r);
+   const rp=B(G,1.5,.2,6,SX(x+w/2),1.6,SZ(y+h+2),C.wood);rp.rotation.x=.5;},
+  compost(x,y,w,h){const n=3;for(let i=0;i<n;i++){B(G,w/n-.4,3,h,SX(x+(i+.5)*w/n),1.5,SZ(y+h/2),0x7a5a35);B(G,w/n-1,.3,h-1,SX(x+(i+.5)*w/n),3,SZ(y+h/2),0x4a3520);}},
+  hives(pts){pts.forEach(([x,y])=>{L.box(x,y,3,3,1,C.wood,0);L.box(x,y,3,3,2.4,0xe6c050,1);L.box(x-.2,y-.2,3.4,3.4,.3,0xf2f0ea,3.4);});},
+  septic(x,y,fx,fy,fw,fh,res){L.box(x,y,10,6,.6,0x8f8f86);L.flat(fx,fy,fw,fh,0x9fbf6a,.1);for(let i=1;i<4;i++)L.path([[fx+2,fy+i*fh/4],[fx+fw-2,fy+i*fh/4]],.6,0xe8e2d0,.14);
+   L.label(fx+fw/2,fy+fh/2,'Septic + drain field');if(res){L.flat(res[0],res[1],res[2],res[3],0xb8cc8a,.1);L.label(res[0]+res[2]/2,res[1]+res[3]/2,'Reserve field');}},
+  barndo(x,y,w,h,cw){L.box(x,y,w,h,14,0xc9b89a);const g=gable(SX(x+w/2),SZ(y+h/2),w,h,'z',14);roofs.remove(g);G.add(g);g.traverse(o=>{if(o.isMesh&&o.material===tileMat)o.material=MAT.metal;});
+   L.flat(x+w,y,cw,h,C.slab,.2);const r=new THREE.Mesh(new THREE.BoxGeometry(cw+1,.3,h+1),MAT.metal);r.position.set(SX(x+w+cw/2),11,SZ(y+h/2));r.rotation.z=.12;G.add(r);
+   for(let t=0;t<=h;t+=12)inst('post',GEO.post,MAT.post,SX(x+w+cw-.5),5.5,SZ(y+t),1,11,1);},
+  patio(x,y,w,h){L.flat(x,y,w,h,0xc9b28e,.25);for(const[dx,dy]of[[1,1],[w-1,1],[1,h-1],[w-1,h-1]])B(G,.8,9,.8,SX(x+dx),4.5,SZ(y+dy),C.trim);
+   for(let t=1;t<w;t+=1.5)B(G,.3,.4,h,SX(x+t),9.2,SZ(y+h/2),C.trim);L.box(x+2,y+2,10,3,3,0x9a948a);},
+  tents(x,y,w,h){L.flat(x,y,w,h,0xb8a882,.18);for(let i=0;i<3;i++){const m=new THREE.Mesh(new THREE.ConeGeometry(3.5,5,4),M([0x3f6f9f,0xd07a3a,0x5f8f4f][i]));m.position.set(SX(x+4+i*8),2.5,SZ(y+h/2));m.rotation.y=Math.PI/4;G.add(m);}},
+  toilets(x,y,w,h){for(let i=0;i<2;i++){L.box(x+2+i*8,y+3,5,5,7.5,0x8a6a45);L.box(x+1.7+i*8,y+2.7,5.6,5.6,.3,0x9aa3a8,7.6);}L.flat(x,y,w,h,0xb8a882,.1);},
+  playset(x,y,w,h){L.flat(x,y,w,h,0x9a7a55,.15);const c=[SX(x+w/2),SZ(y+h/2)];[[-4,-3],[4,-3],[-4,3],[4,3]].forEach(([a,b])=>{const p=B(G,.4,8,.4,c[0]+a,4,c[1]+b,0xc04a3a);});B(G,9,.4,.4,c[0],8,c[1]-3,0xc04a3a);B(G,9,.4,.4,c[0],8,c[1]+3,0xc04a3a);
+   const sl=B(G,1.8,.2,7,c[0]+2,3,c[1]+6,0xe8c040);sl.rotation.x=.6;},
+  hammocks(x,y,w,h){L.flat(x,y,w,h,0xa8946a,.12);for(let i=0;i<2;i++){const z=SZ(y+3+i*6);[x+2,x+w-2].forEach(px=>B(G,.6,6,.6,SX(px),3,z,C.wood));
+   const pts=[];for(let k=0;k<=10;k++){const t=k/10;pts.push(new THREE.Vector3(SX(x+2+(w-4)*t),4.5-Math.sin(Math.PI*t)*2.2,z));}G.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),16,.35,5),M([0xe0603a,0x3a90c0][i])));}},
+  finish(){for(const k in batches){const b=batches[k],im=new THREE.InstancedMesh(b.geo,b.mat,b.list.length);b.list.forEach((p,i)=>{dummy.position.set(p[0],p[1],p[2]);dummy.scale.set(p[3],p[4],p[5]);dummy.rotation.set(0,p[6],0);dummy.updateMatrix();im.setMatrixAt(i,dummy.matrix);if(p[7]!==undefined)im.setColorAt(i,new THREE.Color(p[7]));});
+   im.castShadow=k!=='plant';im.receiveShadow=true;G.add(im);}}};
+ CONCEPTS[key]=L;return L;}
+const GEO={plant:new THREE.ConeGeometry(.55,1.4,5).translate(0,.7,0),trunk:new THREE.CylinderGeometry(.5,.7,1,6),canopy:new THREE.IcosahedronGeometry(1,1),
+ frond:(()=>{const g=new THREE.ConeGeometry(.8,7,4);g.translate(0,3.5,0);g.rotateX(1.9);g.scale(1,1,1);return g;})(),post:new THREE.BoxGeometry(.35,1,.35),tank:new THREE.CylinderGeometry(1,1,1,18)};
+const MAT={plant:M(0x4f8f2f),trunk:M(0x6b4f35),palmTrunk:M(0x8a7558),leaf:new THREE.MeshStandardMaterial({roughness:.9,flatShading:true}),frond:M(0x3f7a2a),post:M(0x8a6a45),
+ mesh:new THREE.MeshStandardMaterial({color:0xb0b0a8,transparent:true,opacity:.35,side:THREE.DoubleSide}),metal:new THREE.MeshStandardMaterial({color:0x9aa3a8,metalness:.5,roughness:.45,side:THREE.DoubleSide})};
+function common(L){[[52,86],[116,62],[157,58],[157,131]].forEach(p=>L.tank(...p));L.label(46,95,'Rain tanks');L.septic(150,142,160,152,40,30,[160,186,40,16]);}
+function well(L,x,y){L.well(x,y);L.label(x,y-8,'Future well');}
+{const L=makeLayer('A');common(L);
+ L.rows(4,34,48,86,4);L.label(28,78,'Staple plot','cassava · sweet potato');
+ L.rows(84,4,68,40,4,true);L.label(118,22,'Staple plot','plantain · cassava');
+ L.rows(80,44,40,20,3,false,0x6fb04a);L.label(100,52,'Kitchen garden');
+ L.coop(182,60,20,12);L.label(192,56,'Chicken coop (raised)');L.fenceRect(170,74,34,30);L.label(187,90,'Run','35 hens');
+ L.compost(160,108,10,8);L.label(165,120,'Compost');
+ for(let x=10;x<52;x+=10)for(let y=130;y<200;y+=12)L.tree(x,y,4.5);L.label(30,124,'Orchard');
+ for(let x=88;x<148;x+=14)L.tree(x,160,4);L.label(116,170,'Papaya · citrus row');
+ L.path([[81,182],[116,188],[150,180]],2.5,0x7fb0c8);L.label(116,194,'Swale');
+ L.hives([[192,30],[198,30]]);L.label(195,38,'Bees');well(L,40,24);
+ L.path([[79,110],[56,120],[40,100],[30,70]],3,0xd6be96);L.path([[121,64],[150,80],[170,90]],3,0xd6be96);L.finish();}
+{const L=makeLayer('B');common(L);
+ L.barndo(3,40,36,48,12);L.label(21,60,'Barndominium','30×48 · bunk room · workshop');L.label(45,64,'Covered side','12×48');
+ L.patio(80,48,40,18);L.label(100,57,'Outdoor kitchen + patio');
+ L.coop(36,4,14,8);L.fenceRect(50,2,30,16);L.label(58,10,'Coop + run','30 hens');
+ L.toilets(124,4,26,12);L.label(137,10,'Composting toilets');
+ L.tents(180,60,24,18);L.label(192,69,'Overflow tents');
+ L.rows(84,150,62,48,4);L.label(115,146,'Staple plot');L.rows(154,78,22,28,3,false,0x6fb04a);L.label(165,92,'Kitchen garden');
+ [[10,110],[20,125],[10,140],[25,155],[10,175],[30,190],[45,105],[40,140]].forEach(p=>L.tree(p[0],p[1],5));L.label(25,170,'Orchard');
+ L.water(195,120,7,10);L.label(195,134,'Pond');L.compost(170,18,8,7);L.label(174,28,'Compost');well(L,95,24);
+ L.path([[62,124],[51,95],[40,90]],4,0xd6be96);L.path([[79,70],[60,40],[50,20]],3,0xd6be96);L.path([[121,60],[150,25],[140,16]],3,0xd6be96);L.finish();}
+{const L=makeLayer('C');common(L);let sd=9;const r=()=>((sd=(sd*16807)%2147483647)/2147483647),U=(a,b)=>a+(b-a)*r();
+ for(let i=0;i<40;i++)L.tree(U(4,52),U(34,200),U(3,6));for(let i=0;i<18;i++)L.tree(U(84,150),U(4,40),U(3,6));
+ [[10,40],[30,195],[140,8],[205,195]].forEach(p=>L.tree(p[0],p[1],5,true));
+ L.label(28,110,'Food forest','mango · avocado · breadfruit');L.label(117,22,'Citrus & banana guild');
+ [60,95,130,165].forEach(yy=>L.path([[3,yy],[25,yy+5],[52,yy]],2,0x7fb0c8));L.label(28,170,'Swales');
+ L.water(190,100,9,14);L.label(190,118,'Pond');L.rows(80,44,40,20,3,false,0x6fb04a);L.label(100,52,'Keyhole beds');
+ L.coop(184,62,10,8);L.fenceRect(180,60,18,14,3);L.label(189,72,'Chicken tractor','20 hens');
+ L.rows(84,150,60,40,5);L.label(114,146,'Cassava / sweet potato');L.compost(160,108,10,8);L.label(165,120,'Compost');
+ L.hives([[192,30],[198,30]]);L.label(195,38,'Bees');well(L,60,22);
+ L.path([[79,110],[55,130],[30,150],[20,190]],2.5,0xd6be96);L.path([[121,64],[150,90],[185,95]],2.5,0xd6be96);L.finish();}
+{const L=makeLayer('D');common(L);
+ L.patio(80,46,42,20);L.label(101,56,'Patio + outdoor kitchen');L.water(100,36,8,6,.35);L.label(100,30,'Plunge pool');
+ L.flat(5,40,40,30,0x6fae4a,.1);L.label(25,55,'Play lawn');L.playset(8,74,12,10);L.label(14,79,'Play set');
+ [[10,100],[25,105],[40,100],[15,125],[35,130]].forEach(p=>L.tree(p[0],p[1],5));L.label(26,140,'Shade orchard','mango · avocado · coconut');
+ L.coop(164,60,14,9);L.fenceRect(178,58,24,22);L.label(190,69,'Coop','20 hens');
+ L.rows(84,150,62,46,4);L.label(115,146,'Staple plot');L.rows(154,82,24,22,3,false,0x6fb04a);L.label(166,93,'Kitchen garden');
+ L.water(195,108,6,8);L.label(195,120,'Pond');L.hammocks(130,4,18,12);L.label(139,10,'Hammocks');
+ [[125,22],[150,22],[205,195],[5,195]].forEach(p=>L.tree(p[0],p[1],5,true));
+ {const m=L.flat(60,4,30,24,0xe0dccb,.1);L.path([[60,4],[90,4],[90,28],[60,28],[60,4]],.5,0x7a6a50,.13);}L.label(75,16,'Future barndo site','reserved');
+ L.compost(160,108,10,8);L.label(165,120,'Compost');well(L,40,24);
+ L.path([[79,66],[60,60],[40,70]],3,0xd6be96);L.path([[121,70],[140,30],[150,15]],3,0xd6be96);L.path([[152,70],[170,85]],3,0xd6be96);L.finish();}
+function setLayout(k){for(const c in CONCEPTS)CONCEPTS[c].G.visible=(c===k);const s=document.getElementById('layout');if(s)s.value=k||'';}
+window.setLayout=setLayout;
+
 export const placeables={types:{},items:[],layer:new THREE.Group()}; scene.add(placeables.layer); window.placeables=placeables;
 // ================= INFO / UI =================
 document.getElementById('info').innerHTML=`Conditioned ≈ ${cond} sq ft (base plan ≈ ${Math.round(BASE_COND)} sq ft, scale ×${(FT*PLAN_PX_FT).toFixed(3)})<br>Garage ${Math.round((GAR[2]-GAR[0])*FT)}×${Math.round((GAR[3]-GAR[1])*FT)} ft (not counted)`;
@@ -370,6 +471,8 @@ document.getElementById('grid').onchange=e=>grid.visible=grid50.visible=e.target
 const hv=location.hash.slice(1); setView(views[hv]?hv:'3d'); if(hv=='kitchen'){setRoof(false);roofs.userData.k=1;cam.position.set(XX(470)-20,50,ZZ(430)+45);controls.target.set(XX(470),0,ZZ(430));}
 if(hv=='foyer'){setRoof(false);roofs.userData.k=1;cam.position.set(XX(500),75,ZZ(720));controls.target.set(XX(600),0,ZZ(470));}
 if(hv=='doors'){setRoof(false);roofs.userData.k=1;cam.position.set(XX(860),62,ZZ(600));controls.target.set(XX(560),0,ZZ(450));}
+document.getElementById('layout').onchange=e=>setLayout(e.target.value);
+if(/^concept[A-D]$/.test(hv)){setLayout(hv.slice(-1));roomLabels.visible=true;document.getElementById('rooms').checked=true;cam.position.set(150,170,230);controls.target.set(0,0,0);}
 if(hv=='back'){setRoof(false);roofs.userData.k=1;cam.position.set(XX(560),40,ZZ(150));controls.target.set(XX(440),2,ZZ(380));}
 if(hv=='door'){cam.position.set(XX(615),6,ZZ(575)+30);controls.target.set(XX(644),4,ZZ(575));}
 if(hv=='noroof'){setRoof(false);roofs.userData.k=1;cam.position.set(XX(511)+10,95,ZZ(429)+75);controls.target.set(XX(511),0,ZZ(429));}
@@ -381,7 +484,7 @@ if(hv=='grid'){coordGrid.visible=true;document.getElementById('cgrid').checked=t
 document.getElementById('jungle').onchange=e=>jungle.visible=e.target.checked;
 document.getElementById('rooms').onchange=e=>roomLabels.visible=e.target.checked;
 addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
-(function loop(){{const k=roofs.userData.k||0,n=k+(roofTarget-k)*.12;roofs.userData.k=n;roofs.position.y=n*28;roofs.visible=n<.97;
+(function loop(){for(const c in CONCEPTS)CONCEPTS[c].labels.visible=roomLabels.visible;{const k=roofs.userData.k||0,n=k+(roofTarget-k)*.12;roofs.userData.k=n;roofs.position.y=n*28;roofs.visible=n<.97;
   roomLabels.children.forEach(sp=>{const d=cam.position.distanceTo(sp.position),s=Math.min(1.6,Math.max(1,d/90));sp.scale.set(sp.userData.base*s,sp.userData.base*s/3.2,1);});}
  controls.update();renderer.render(scene,cam);requestAnimationFrame(loop);})(); window.READY=true;
 </script></body></html>
